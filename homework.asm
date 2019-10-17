@@ -1,4 +1,6 @@
 %include	'functions.asm'
+%include 	'memoryFunc.asm'
+%include 	'functions1.asm'
 
 SECTION .data
 msg1	db	'Please input x and y: ', 0h
@@ -13,13 +15,17 @@ numX: 		RESB	255
 numY:		RESB	255
 plusAns:	RESB	255
 mulAns:		RESB	255
+minusAns:	RESB	255
 num1:		RESB	255
 num0:		RESB	255
 string:		RESB	255
-output:		RESB	255
 mul1:		RESB	255
 mul2:		RESB 	255
 transMul: 	RESB	255
+sym1:		RESB 	2
+sym2: 		RESB	2
+plusAnsSym: RESB 	2
+mulAnsSym:	RESB	2
 
 SECTION .text
 global	_start
@@ -68,6 +74,14 @@ storeYstring:
 
 .storeFinished:
 	mov 	eax, stringx
+	mov 	ebx, sym1
+	call 	isNeg
+
+	mov 	eax, stringy
+	mov 	ebx, sym2
+	call 	isNeg
+
+	mov 	eax, stringx
 	call 	reverse
 
 	mov 	eax, stringy
@@ -86,19 +100,146 @@ storeYstring:
 	
 	mov 	eax, numX
 	mov 	ebx, numY
-	call 	plus
+	call 	bigNumPlus
+
+	mov 	eax, plusAnsSym
+	call 	printSym
 
 	mov 	eax, plusAns
-	call 	printN
+	call 	printNLF
 
 	mov 	eax, numX
 	mov		ebx, numY
-	call 	multiply
+	call 	bigNumMul
+
+	mov 	eax, mulAnsSym
+	call 	printSym
 
 	mov 	eax, mulAns
-	call 	printN
+	call 	printNLF
 
 	call	quit
+
+;--------------------------------------------------
+; void bigNumPlus(numX, numY)
+; if sym1 == sym2 , plusAns = numX + numY
+; 
+
+bigNumPlus:
+	push 	ebx
+	push 	eax
+	
+	xor 	eax, eax
+	mov 	al, [sym1]
+	
+	xor 	ebx, ebx
+	mov 	bl, [sym2]
+
+	cmp 	eax, ebx
+	jnz 	.symNotEqual
+
+.symEqual:
+	mov 	byte[plusAnsSym], al
+	pop 	eax
+	pop 	ebx
+	call 	plus
+	
+	jmp 	.over
+
+.symNotEqual:
+	pop 	eax
+	pop 	ebx
+
+	push 	eax
+	call 	Ncompare
+	cmp 	eax, 1
+	pop		eax
+	jz  	.symIsX
+	jg 		.symIsY
+
+.symIsX:
+	push 	eax
+	xor 	eax, eax
+	mov		al, [sym1]
+	mov 	byte[plusAnsSym], al
+	pop 	eax
+
+	push 	ebx
+	mov 	ebx, plusAns
+	call 	memoryMove
+	pop 	ebx
+
+	mov 	eax, plusAns
+	call 	minus
+
+	jmp 	.over
+
+.symIsY:
+	push 	ebx
+	xor 	ebx, ebx
+	mov		bl, [sym2]
+	mov 	byte[plusAnsSym], bl
+	pop 	ebx
+
+	push 	eax
+	push 	ebx
+	mov 	eax, ebx
+	mov 	ebx, plusAns
+	call 	memoryMove
+	pop 	ebx
+	pop 	eax
+
+	mov 	ebx, eax
+	mov 	eax, plusAns
+	call 	minus
+
+	jmp 	.over
+
+.over:
+	ret
+
+;---------------------------------------------------
+; void 	bigNumMul(numX, numY)
+; if sym1 == sym2, or if numX==0 or numY==0, mulAnsSym = 0
+; else = 1
+bigNumMul:
+	push 	ebx
+	push 	eax
+
+
+	xor 	eax, eax
+	mov 	al, [sym1]
+
+	xor 	ebx, ebx
+	mov 	bl, [sym2]
+
+	cmp 	eax, ebx
+	jnz 	.symNotEqual
+	jmp 	.mul
+.symNotEqual:
+	mov 	byte[mulAnsSym], 1
+	jmp 	.mul
+
+
+.mul:
+	pop 	eax
+	pop 	ebx
+	call 	multiply
+
+	push 	eax
+	mov 	eax, mulAns
+	call 	isZero
+	cmp 	eax, 1
+	pop 	eax
+	jnz 	.over
+
+	mov 	byte[mulAnsSym], 0
+
+.over:
+
+	ret
+	
+
 
 
 ;--------------------------------------------------
@@ -154,109 +295,6 @@ reverse:
 
 	pop 	ebx
 	pop		esi
-	pop		ecx
-
-	ret
-
-
-;----------------------------------------------
-; void memoryMove(memory a, memory b)
-; eax store the data need to pushed
-; ebx store the memory that need be pushed in
-; it is same to 'push A to B'
-memoryMove:
-
-	push 	ecx
-	push 	ebx
-	push 	edx
-
-	push 	eax			;clear memoryB at first
-	mov 	eax, ebx
-	call 	memoryClear
-	pop 	eax
-
-	mov 	edx, ebx	;move the address in ebx to edx
-	mov 	ecx, 0
-
-
-.moveLoop:
-	xor 	ebx, ebx
-	mov 	bl, [eax+ecx]
-	mov 	byte[edx+ecx], bl
-	cmp 	ecx, 254
-	jz 		.moveOver
-
-	inc 	ecx
-	jmp 	.moveLoop
-
-.moveOver:
-	pop 	edx
-	pop 	ebx
-	pop 	ecx
-
-	ret
-
-;--------------------------------------------------
-; void memoryClear(memory a)
-; clear the memory(make it all '0')
-
-memoryClear:
-	push 	ecx
-	push 	ebx
-
-	mov 	ecx, 0
-
-.clearLoop:
-	xor		ebx, ebx
-	mov 	bl, [eax+ecx]
-	cmp 	bl, 0
-	jz 		.clearOver
-
-	mov 	byte[eax+ecx], 0
-	inc 	ecx
-	jmp		.clearLoop
-
-.clearOver:
-	pop 	ebx
-	pop 	ecx
-
-	ret
-
-;---------------------------------------------------
-; void printN(memory a)
-; reverse and print
-; the string will be stored in string(indeed be deleted after print)
-
-printN:
-	push 	ecx
-	push 	ebx
-
-	mov 	ecx, 0
-
-.printNLoop:
-	xor 	ebx, ebx
-	mov 	bl, [eax+ecx]
-	cmp		bl, 80		;set 80 that is 'P' as the end
-	jz 		.printNOver
-
-	add 	bl, 48
-	mov 	byte[output+ecx], bl
-	inc 	ecx
-	jmp 	.printNLoop
-
-
-.printNOver:
-
-	mov 	eax, output
-	call 	reverse
-
-	mov 	eax, output
-	call 	sprintLF
-	
-	mov 	eax, output
-	call 	memoryClear
-
-	pop 	ebx
 	pop		ecx
 
 	ret
@@ -408,102 +446,6 @@ plus:
 	pop 	ecx
 
 	ret
-
-;--------------------------------------------
-; void normalizeNum(Number num)
-; normalize number
-
-normalizeNum:
-	push 	ebx
-	push 	ecx
-	push 	edx
-
-	mov		ecx, 0
-
-.normalLoop:
-
-	xor 	ebx, ebx
-	mov		bl, [eax+ecx]
-	cmp 	bl, 80
-	jz 		.normalOver
-
-	cmp 	bl, 10
-	jl		.noChange
-
-	xor 	edx, edx
-	inc 	ecx
-	mov 	dl, [eax+ecx]		;dl stored the next number
-
-	cmp 	dl, 80
-	jnz		.noLonger
-
-	mov 	byte[eax+ecx], 0	;if next number is 80, change it to 0
-	mov 	edx, 0
-	inc 	ecx
-	mov 	byte[eax+ecx], 80	;then change next next number to 80
-	dec		ecx
-
-.noLonger:
-	inc		dl					;next number ++
-	mov 	byte[eax+ecx], dl	;put it back
-
-	dec		ecx
-	sub		bl, 10
-
-	mov		byte[eax+ecx], bl
-
-.noChange:
-	inc 	ecx
-	jmp		.normalLoop
-
-.normalOver:
-	push 	eax
-	call 	dez
-	pop 	eax
-
-	pop 	edx
-	pop		ecx
-	pop 	ebx
-
-	ret
-
-;--------------------------------------------------------
-;	number Dez(memory A)
-;	Delete end zero
-
-dez:
-	push 	ebx
-	push 	ecx
-	
-	push 	eax
-	call 	nlen
-	mov 	ecx, eax
-	dec 	ecx
-	pop 	eax
-
-.dezLoop:
-	cmp		ecx, 0
-	jz	 	.dezOver
-
-
-	xor 	ebx, ebx
-	mov 	bl, [eax+ecx]
-	cmp 	bl, 0
-	jnz 	.dezOver
-
-	mov 	byte[eax+ecx], 80
-	inc 	ecx
-	mov 	byte[eax+ecx], 0
-	sub		ecx, 2
-
-	jmp 	.dezLoop
-
-.dezOver:
-	pop 	ecx
-	pop 	ebx
-
-	ret
-
 ;--------------------------------------------------------
 ;	number multplyBy10(memory A)
 ;	multply itself By10 
@@ -708,40 +650,6 @@ multiply:
 	pop 	ecx
 
 	ret
-
-
-
-
-;--------------------------------------------------
-; bool isZero(number A)
-; if A is equal to zero, return 1, else return 0
-
-isZero:
-
-	push	ebx
-
-	xor 	ebx, ebx
-	mov 	bl, [eax+1]
-	cmp 	bl, 80
-	jnz 	.return0
-
-	xor 	ebx, ebx
-	mov		bl, [eax]
-	cmp		bl, 0
-	jnz 	.return0
-
-.return1:
-	mov 	eax, 1
-	jmp 	.over
-
-.return0:
-	mov 	eax, 0
-
-.over:
-	pop 	ebx
-
-	ret
-
 
 
 
