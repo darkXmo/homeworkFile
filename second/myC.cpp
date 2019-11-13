@@ -6,6 +6,7 @@
 #include <string>
 #include <cstring>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define BYTE    unsigned char
 #define WORD    unsigned short
@@ -100,8 +101,15 @@ void printLSLChind(string head, floderItem floder);
 void printcat(floderItem floder, string fileName);
 
 char* outputString;
+extern "C"{
+	void sprint();
+	void rsprint();
+}	
 
 int main() {
+	outputString = "01";
+	sprint();
+
 	const char* filePath = "./nju.img";
 	FILE* pImageFile = fopen(filePath, "rb");
 
@@ -140,12 +148,11 @@ int main() {
 	string input;
 
 	// TODO:
-	outputString = (char*)"> ";
 
 	while (input != "exit") {
 		// TODO
-		outputString = (char*)"> ";
-		cout << outputString;
+
+
 		getline(cin, input);
 		input.erase(0, input.find_first_not_of(" "));
 		input.erase(input.find_last_not_of(" ") + 1);

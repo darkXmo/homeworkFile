@@ -1,15 +1,16 @@
-extern ouputString
+extern outputString
 
 global sprint
 global rsprint
 
 section .data:
 
-rc:     db  1Bh, '[33;31m', 0
-.len    equ $ - rc
 
 bc:     db  1Bh, '[30;0m', 0
 .len    equ $ - bc
+
+rc:     db  1Bh, '[33;31m', 0
+.len    equ $ - rc
 
 section .text
 
@@ -54,6 +55,12 @@ rsprint:
  
     call    realPrint
 
+    mov     ebx, 1
+    mov     eax, 4
+    mov     ecx, bc
+    mov     edx, bc.len
+    int     80h
+
     pop     eax
     pop     ebx
     pop     ecx
@@ -73,9 +80,10 @@ realPrint:
     push    eax
 
     push    eax
-    mov     eax, [ouputString]
+    mov     eax, [outputString]
     call    slen
-    mov     edx, eax        // edx store the len
+    mov     edx, eax
+
     pop     eax
 
     mov     ecx, eax
