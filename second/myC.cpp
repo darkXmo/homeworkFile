@@ -108,13 +108,19 @@ DWORD ReadData(DWORD LSB, unsigned char* outBuffer);
 void printLS();
 void printLSChild(string head, floderItem floder);
 void printLSL();
-void printLSLChind(string head, floderItem floder);
-void printcat(floderItem floder, string fileName);
+void printLSLChild(string head, floderItem floder);
+void printcat(string fileName);
 
 void printB(string input);
 void printR(string input);
 
 command coExp(string input);
+
+void printLSc(string name);
+void printLSLc(string name);
+int gfNum(string name);
+floderItem getFloder(unsigned int no);
+string getHead(unsigned int no);
 
 char* outputString;
 extern "C"{
@@ -177,13 +183,13 @@ int main() {
 			printLSL();
 		}
 		else if (c.type == 3){
-
+			printLSc(c.name);
 		}
 		else if (c.type == 4){
-			
+			printLSLc(c.name);
 		}
 		else if (c.type == 5){
-			
+			printcat(c.name);
 		}
 	}
 	return 0;
@@ -476,6 +482,9 @@ void printLS() {
 	
 	printB(output);
 
+
+	printB("\n");
+
 	string head = "/";
 	for (unsigned int i = 0; i < floderNum; i++) {
 		printLSChild(head, item.Floders[i]);
@@ -487,8 +496,6 @@ void printLS() {
 // 迭代循环输出floder里floder的内容
 void printLSChild(string head, floderItem floder) {
 
-
-	printB("\n");
 
 	string output;
 	output = head +  floder.floderName + "/:\n";
@@ -527,6 +534,7 @@ void printLSChild(string head, floderItem floder) {
 	}
 
 	printB(output);
+	printB("\n");
 	output = "";
 
 	head = head + floder.floderName + "/";
@@ -562,12 +570,12 @@ void printLSL() {
 	}
 	printB("\n");
 	for (unsigned int i=0;i<fdN;i++){
-		printLSLChind("/",root.Floders[i]);
+		printLSLChild("/",root.Floders[i]);
 	}
 }
 
 
-void printLSLChind(string head, floderItem root) {
+void printLSLChild(string head, floderItem root) {
 	unsigned fdN = root.childFloderNum;
 	unsigned flN = root.childFileNum;
 	string out = head + root.floderName + "/ " + to_string(fdN) + " " + to_string(flN) + ":\n";
@@ -593,14 +601,12 @@ void printLSLChind(string head, floderItem root) {
 		out = "";
 	}
 	printB("\n");
-	for (unsigned int i=0;i<fdN;i++){
-		printLSLChind(head+root.floderName+"/ ",root.Floders[i]);
+	for (unsigned int i=2;i<fdN+2;i++){
+		printLSLChild(head+root.floderName+"/",root.Floders[i]);
 	}
 }
 
-void printcat(floderItem floder, string fileName) {
 
-}
 
 
 void printB(string input){
@@ -631,11 +637,28 @@ command coExp(string input){
 	bool bValid2 = regex_match(input, rerResult2, repPattern2);
 	if (bValid2)
 	{
-		printB("type2\n");
 		ans.type = 2;
 		ans.name = "";
 		return ans;
 	}
+	bool commandFile = false;
+	regex repPatternF(".[A-Z]+",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResultF;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValidF = regex_search(input, rerResultF, repPatternF);
+	if (bValidF)
+	{
+		commandFile = true;
+		if (input.substr(0,2)=="ls"){
+			printB("File cannot be ls. ");
+			return ans;
+		}
+	}
+
+
+
 	regex repPattern3("(ls +)((/[0-9A-Z]+)+)$",regex_constants::extended);
 	// 声明匹配结果变量
 	match_results<string::const_iterator> rerResult3;
@@ -644,7 +667,6 @@ command coExp(string input){
 	bool bValid3 = regex_match(input, rerResult3, repPattern3);
 	if (bValid3)
 	{
-		printB("type3\n");
 		ans.type = 3;
 		ans.name = rerResult3[2];
 		return ans;
@@ -658,7 +680,6 @@ command coExp(string input){
 	bool bValid41 = regex_match(input, rerResult41, repPattern41);
 	if (bValid41)
 	{
-		printB("type4\n");
 		ans.type = 4;
 		ans.name = rerResult41[2];
 		return ans;
@@ -672,7 +693,6 @@ command coExp(string input){
 	bool bValid42 = regex_match(input, rerResult42, repPattern42);
 	if (bValid42)
 	{
-		printB("type4\n");
 		ans.type = 4;
 		ans.name = rerResult42[2];
 		return ans;
@@ -686,7 +706,6 @@ command coExp(string input){
 	bool bValid43 = regex_match(input, rerResult43, repPattern43);
 	if (bValid43)
 	{
-		printB("type4\n");
 		ans.type = 4;
 		ans.name = rerResult43[2];
 		return ans;
@@ -700,10 +719,173 @@ command coExp(string input){
 	bool bValid5 = regex_match(input, rerResult5, repPattern5);
 	if (bValid5)
 	{
-		printB("type5\n");
 		ans.type = 5;
 		ans.name = rerResult5[2];
 		return ans;
 	}
+
+	regex repPattern51("(cat) +([A-Z0-9]+(.[A-Z]+)?)$",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResult51;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValid51 = regex_match(input, rerResult51, repPattern51);
+	if (bValid51)
+	{
+		ans.type = 5;
+		string r = "/";
+		r += rerResult51[2];
+		ans.name = r;
+		return ans;
+	}
 	return ans;
+}
+
+int gfNum(string name){
+	unsigned int ans = 0;
+	smatch result;
+	regex pattern("(/[0-9A-Z]+)");
+
+	//迭代器声明
+	string::const_iterator iterStart = name.begin();
+	string::const_iterator iterEnd = name.end();
+	string temp;
+
+	vector <string> fl;
+	while (regex_search(name, result, pattern))
+	{
+		temp = result[0];
+		fl.push_back(temp.substr(1));
+		name = result.suffix().str();
+	}
+	unsigned int size = fl.size();
+
+	floderItem root = floderList[0];
+	unsigned int flN = root.childFloderNum;
+	string floderName = fl[0];
+	bool notFound = true;
+	for (unsigned int i=0;i<flN;i++){
+		floderItem floder = root.Floders[i];
+		string n = floder.floderName;
+		if (n == floderName) {
+			root = floder;
+			notFound = false;
+			break;
+		}
+	}
+	if (notFound){
+		return -1;
+	}
+	if (size == 1){
+		return root.no;
+	}
+	for(unsigned int i=1;i<size;i++){
+		flN = root.childFloderNum;
+		floderName = fl[i];
+		notFound = true;
+		for (unsigned int i=2;i<flN+2;i++){
+			floderItem floder = root.Floders[i];
+			string n = floder.floderName;
+			if (n == floderName) {
+				root = floder;
+				notFound = false;
+				break;
+			}
+		}
+		if (notFound){
+			return -1;
+		}
+	}
+	return root.no;
+}
+
+void printLSc(string name){
+	int fN = gfNum(name);
+	if (fN == -1){
+		printB("floder not found!\n");
+	}
+	else {
+		floderItem floder = getFloder(fN);
+		string head = getHead(fN);
+		printLSChild(head, floder);
+		printB("\n");
+	}
+	
+}
+
+void printLSLc(string name){
+	int fN = gfNum(name);
+	if (fN == -1){
+		printB("floder not found!\n");
+	}
+	else {
+		floderItem floder = getFloder(fN);
+		string head = getHead(fN);
+		printLSLChild(head, floder);
+		printB("\n");
+	}
+}
+
+void printcat(string name) {
+	string filename;
+	regex Pattern("(/[A-Z0-9]+(.[A-Z]+)?)$",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> Result;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool isAfile = regex_match(name, Result, Pattern);
+	if (isAfile){
+		catFile(0, name.substr(1));
+	}
+	else {
+		smatch m;
+		regex_search(name, m, Pattern);
+		filename = m[0];
+		unsigned int floL = name.length() - filename.length(); 
+		string floderPath = name.substr(0, floL);
+		int fN = gfNum(floderPath);
+		if (fN == -1){
+			printB("floder not found!\n");
+		}
+		else {
+			catFile(fN, filename.substr(1));
+		}
+	}
+
+}
+
+floderItem getFloder(unsigned int no){
+	if (no == 0){
+		return floderList[0];
+	}
+	if (no < 10){
+		return floderList[no];
+	}
+	unsigned int i = no % 10;
+	no /= 10;
+	floderItem ans = floderList[i];
+	while(no > 0){
+		i = no % 10;
+		no /= 10;
+		ans = ans.Floders[i+1];
+	}
+	return ans;
+}
+
+string getHead(unsigned int no){
+	if (no < 10){
+		return "/";
+	}
+	unsigned int i = no % 10;
+	no /= 10;
+	floderItem ans = floderList[i];
+	string res = "";
+	while(no > 0){
+		i = no % 10;
+		no /= 10;
+		res = "/" + ans.floderName;
+		ans = ans.Floders[i+1];
+	}
+	res += "/";
+	return res;
 }
