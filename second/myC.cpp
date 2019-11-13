@@ -1,11 +1,9 @@
-ï»¿#pragma warning( disable : 4996)
+#pragma warning( disable : 4996)
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <cstring>
-#include <string>
+#include <fstream>
+#include <iostream>
 #include <vector>
+#include <string>
 
 #define BYTE    unsigned char
 #define WORD    unsigned short
@@ -45,7 +43,8 @@ typedef struct _FILE_HEADER FILE_HEADER;
 typedef struct _FILE_HEADER* PFILE_HEADER;
 
 struct _FILE_HEADER {
-	BYTE    DIR_Name[11];
+	BYTE    DIR_Name[8];
+	BYTE    DIR_TYPE[3];
 	BYTE    DIR_Attr;
 	BYTE    Reserved[10];
 	WORD    DIR_WrtTime;
@@ -56,295 +55,465 @@ struct _FILE_HEADER {
 
 #pragma pack ()
 
-struct FileItem {
-	unsigned int FileNo;
-	string filename;
-	unsigned int type;
-	DWORD startLSB;
-	vector<string> children;
-};
-
-void PrintImage(unsigned char* pImageBuffer);
-
-FILE_HEADER FileHeaders[30];
-
-void SeekRootDir(unsigned char* pImageBuffer);
-
-DWORD ReadFile(unsigned char* pImageBuffer, PFILE_HEADER pFileHeader, unsigned char* outBuffer);
-
-DWORD GetLSB(DWORD ClusOfTable, PFAT12_HEADER pFAT12Header);
-
-WORD GetFATNext(BYTE* FATTable, WORD CurOffset);
-
-DWORD ReadData(unsigned char* pImageBuffer, DWORD LSB, unsigned char* outBuffer);
-
 using namespace std;
 
-vector<FileItem> FileList;
+struct fileItem {
+	unsigned int folderNum = 0;
+	unsigned long size = 0;
+	unsigned int startClus = 0;
+	string fileName;
+};
+
+struct floderItem {
+	unsigned int no = 0;
+	unsigned int childFileNum = 0;
+	unsigned int childFloderNum= 0;
+	unsigned int startClus = 0;
+	string floderName;
+	vector <floderItem> Floders;
+	vector <fileItem> Files;
+};
+
+vector<FILE_HEADER> FileHeaders;
+PFAT12_HEADER pFAT12Header;
+vector <fileItem> fileList;
+vector <floderItem> floderList;
+unsigned int wRootDirStartSec = 0;
+unsigned int floderNum = 1;
+
+unsigned char* pImageBuffer;
+void SeekRootDir();
+floderItem SeekChildDir(floderItem *root, unsigned int number);
+void iSeekChildDir(floderItem* floder);
+void catFile(unsigned int floderNum, string name);
+DWORD ReadFile(WORD FstClus, unsigned char* outBuffer);
+DWORD GetLSB(DWORD ClusOfTable, PFAT12_HEADER pFAT12Header);
+WORD GetFATNext(BYTE* FATTable, WORD CurOffset);
+DWORD ReadData(DWORD LSB, unsigned char* outBuffer);
+
+void printLS();
+void printLSChild(string head, floderItem floder);
+void printLSL();
+void printLSLChind(string head, floderItem floder);
+void printcat(floderItem floder, string fileName);
+
+char* outputString;
 
 int main() {
-
-	const char* filePath = "../../../ref.img";
+	const char* filePath = "../../../nju.img";
 	FILE* pImageFile = fopen(filePath, "rb");
 
-	// fseek æŒ‡é’ˆä½ç½®æ§åˆ¶ï¼Œæ­¤æ—¶æŒ‡é’ˆæŒ‡å‘æ–‡ä»¶çš„æœ«å°¾
+	// fseek Ö¸ÕëÎ»ÖÃ¿ØÖÆ£¬´ËÊ±Ö¸ÕëÖ¸ÏòÎÄ¼şµÄÄ©Î²
 	fseek(pImageFile, 0, SEEK_END);
 
-	// è°ƒç”¨ftellå‡½æ•°ï¼ŒæŒ‡é’ˆçš„å¤§å°ä»£è¡¨æ•´ä¸ªæ–‡ä»¶çš„åç§»é‡ï¼Œè¯¥æ–¹æ³•å°†è¿”å›æ•´ä¸ªæ–‡ä»¶çš„å¤§å°
+	// µ÷ÓÃftellº¯Êı£¬Ö¸ÕëµÄ´óĞ¡´ú±íÕû¸öÎÄ¼şµÄÆ«ÒÆÁ¿£¬¸Ã·½·¨½«·µ»ØÕû¸öÎÄ¼şµÄ´óĞ¡
 	long lFileSize = ftell(pImageFile);
 
-	printf("Image size: %ld\n", lFileSize);
-
 	// alloc buffer
-	// ç”³è¯·ä¸€ä¸ªç©ºé—´ï¼Œè¿™ä¸ªç©ºé—´ç”±charä¸ºå•ä½ï¼ˆå³ä»¥ä¸€ä¸ªå­—èŠ‚ä¸ºå•ä½ï¼‰ï¼Œæ€»å…±ç”³è¯·è¿™ä¸ªæ–‡ä»¶çš„ç©ºé—´ï¼Œåˆšå¥½å°†æ•´ä¸ªæ–‡ä»¶ç½®å…¥ç¼“å­˜ï¼ˆå†…å­˜ï¼‰ä¸­ã€‚
-	unsigned char* pImageBuffer = (unsigned char*)malloc(lFileSize);
+	// ÉêÇëÒ»¸ö¿Õ¼ä£¬Õâ¸ö¿Õ¼äÓÉcharÎªµ¥Î»£¨¼´ÒÔÒ»¸ö×Ö½ÚÎªµ¥Î»£©£¬×Ü¹²ÉêÇëÕâ¸öÎÄ¼şµÄ¿Õ¼ä£¬¸ÕºÃ½«Õû¸öÎÄ¼şÖÃÈë»º´æ£¨ÄÚ´æ£©ÖĞ¡£
+	pImageBuffer = (unsigned char*)malloc(lFileSize);
 
-	// åˆ¤æ–­ç”³è¯·æ˜¯å¦æˆåŠŸ
 	if (pImageBuffer == NULL)
 	{
-		puts("Memmory alloc failed!");
+		printf_s("Memmory alloc failed!");
 		return 1;
 	}
 
-	// å°†æŒ‡é’ˆå›åˆ°æ–‡ä»¶é¦–ä½
 	fseek(pImageFile, 0, SEEK_SET);
 
-	// read the whole image file into memmoryï¼Œå°†æ•´ä¸ªæ–‡ä»¶è¯»è¿›å†…å­˜ã€‚è¿”å›å€¼åº”å½“æ˜¯æ–‡ä»¶å¤§å°ã€‚
+	// read the whole image file into memmory£¬½«Õû¸öÎÄ¼ş¶Á½øÄÚ´æ¡£·µ»ØÖµÓ¦µ±ÊÇÎÄ¼ş´óĞ¡¡£
+	// ÏÖÔÚÕû¸öÎÄ¼ş¶¼ÔÚÕâ¸öplmageBufferÖĞ
 	long lReadResult = fread(pImageBuffer, 1, lFileSize, pImageFile);
 
-	printf("Read size: %ld\n", lReadResult);
-
-	// åˆ¤æ–­è¯»å…¥æ˜¯å¦æ­£å¸¸
-	if (lReadResult != lFileSize)
-	{
-		puts("Read file error!");
-		free(pImageBuffer);
-		fclose(pImageFile);
-		return 1;
-	}
-
-	// finish reading, close file ç»“æŸè¯»å–ï¼Œå·²ç»è¿›å†…å­˜äº†
 	fclose(pImageFile);
 
-
-	// print FAT12 structure è¾“å‡ºå†…å­˜ç»“æ„ä¿¡æ¯
-	PrintImage(pImageBuffer);
-
+	// Ö¸Õë£¬ÓÃÀ´Ö¸ÏòÏÖÔÚµÄÄ¿±ê
+	// »ñµÃÒıµ¼ÇøĞÅÏ¢
+	pFAT12Header = (PFAT12_HEADER)pImageBuffer;
 	
-	// seek files of root directory  è¾“å‡ºimgæ ¹ç›®å½•å†…å®¹
-	SeekRootDir(pImageBuffer);
+	// »ñµÃ¸ùÄ¿Â¼ĞÅÏ¢
+	SeekRootDir();
+	iSeekChildDir(&floderList[0]);
 
+	string input;
 
-	// file read buffer
-	unsigned char outBuffer[4096];
+	// TODO:
+	outputString = (char*)"> ";
 
-	// read file 0
-	DWORD fileSize = ReadFile(pImageBuffer, &FileHeaders[2], outBuffer);
-
-	printf("File size: %u, file content: \n%s", fileSize, outBuffer);
-
-	getchar();
-
+	while (input != "exit") {
+		// TODO
+		outputString = (char*)"> ";
+		cout << outputString;
+		getline(cin, input);
+		input.erase(0, input.find_first_not_of(" "));
+		input.erase(input.find_last_not_of(" ") + 1);
+		if (input.compare("ls") == 0) {
+			printLS();
+		}
+		if (input.compare("ls -l") == 0) {
+			printLSL();
+		}
+	}
 	return 0;
 }
 
-void PrintImage(unsigned char* pImageBuffer)
-{
-	puts("\nStart to print image:\n");
-
-	// ç»“æ„ä½“çš„æŒ‡é’ˆå¯¹å…¶bufferçš„æŒ‡é’ˆï¼Œå› ä¸ºpImageBufferçš„é¦–åœ°å€å¼€å§‹å°±æ˜¯_FAT12_HEADERç»“æ„ä½“ã€‚
-	// ç›´æ¥å°†è¯»åˆ°å†…å­˜ä¸­çš„é•œåƒæ–‡ä»¶é¦–åœ°å€ä¼ ç»™FAT12_HEADERç»“æ„ä½“æŒ‡é’ˆï¼Œè¿›è¡Œå¼ºåˆ¶è½¬åŒ–ï¼Œå°±èƒ½å¯¹å„å­—æ®µè¿›è¡Œè¯»å–äº†ã€‚
-	PFAT12_HEADER pFAT12Header = (PFAT12_HEADER)pImageBuffer;
-
-	// calculate start address of boot program
-	// BOOT_START_ADDRè¡¨ç¤ºBootæ‰‡åŒºåœ¨å†…å­˜ä¸­çš„åŠ è½½èµ·å§‹åœ°å€ä½0x7c00ã€‚
-	// å°†BOOT_START_ADDRï¼ˆBootæ‰‡åŒºè¯»åˆ°å†…å­˜ä¸­çš„é¦–åœ°å€ï¼‰åŠ ä¸Šè·³è½¬Offsetå†åŠ ä¸Š2å°±èƒ½å¾—åˆ°å¼•å¯¼ç¨‹åºçš„é¦–åœ°å€äº†ã€‚
-	WORD wBootStart = BOOT_START_ADDR + pFAT12Header->JmpCode[1] + 2;
-	printf("Boot start address: 0x%04x\n", wBootStart);
-
-	char buffer[20];
-
-	memcpy(buffer, pFAT12Header->BS_OEMName, 8);
-	buffer[8] = 0;
-
-	printf("BS_OEMName:         %s\n", buffer);
-	printf("BPB_BytesPerSec:    %u\n", pFAT12Header->BPB_BytesPerSec);
-	printf("BPB_SecPerClus:     %u\n", pFAT12Header->BPB_SecPerClus);
-	printf("BPB_RsvdSecCnt:     %u\n", pFAT12Header->BPB_RsvdSecCnt);
-	printf("BPB_NumFATs:        %u\n", pFAT12Header->BPB_NumFATs);
-	printf("BPB_RootEntCnt:     %u\n", pFAT12Header->BPB_RootEntCnt);
-	printf("BPB_TotSec16:       %u\n", pFAT12Header->BPB_TotSec16);
-	printf("BPB_Media:          0x%02x\n", pFAT12Header->BPB_Media);
-	printf("BPB_FATSz16:        %u\n", pFAT12Header->BPB_FATSz16);
-	printf("BPB_SecPerTrk:      %u\n", pFAT12Header->BPB_SecPerTrk);
-	printf("BPB_NumHeads:       %u\n", pFAT12Header->BPB_NumHeads);
-	printf("BPB_HiddSec:        %u\n", pFAT12Header->BPB_HiddSec);
-	printf("BPB_TotSec32:       %u\n", pFAT12Header->BPB_TotSec32);
-	printf("BS_DrvNum:          %u\n", pFAT12Header->BS_DrvNum);
-	printf("BS_Reserved1:       %u\n", pFAT12Header->BS_Reserved1);
-	printf("BS_BootSig:         %u\n", pFAT12Header->BS_BootSig);
-	printf("BS_VolID:           %u\n", pFAT12Header->BS_VolID);
-
-	memcpy(buffer, pFAT12Header->BS_VolLab, 11);
-	buffer[11] = 0;
-	printf("BS_VolLab:          %s\n", buffer);
-
-	memcpy(buffer, pFAT12Header->BS_FileSysType, 8);
-	buffer[11] = 0;
-	printf("BS_FileSysType:     %s\n", buffer);
-}
-
-void SeekRootDir(unsigned char* pImageBuffer)
-{
-	// è·Ÿä¹‹å‰ä¸€æ ·ï¼Œå°†å†…å­˜æŒ‡é’ˆæŒ‡å‘ç¼“å­˜å¤´éƒ¨
-	PFAT12_HEADER pFAT12Header = (PFAT12_HEADER)pImageBuffer;
-
-	puts("\nStart seek files of root dir:");
-
-	// sectors number of start of root directory
-	// è®¡ç®—å‡ºäº†æ ¹ç›®å½•çš„èµ·å§‹æ‰‡åŒºã€‚è®¡ç®—æ–¹æ³•ä¸ºï¼šéšè—æ‰‡åŒºæ•° + ä¿ç•™æ‰‡åŒºæ•°(Boot Sector) + FATè¡¨æ•°é‡ Ã— FATè¡¨å¤§å°(Sectors)ã€‚
-	// ä¹Ÿå°±æ˜¯å°†æ ¹ç›®å½•å‰é¢æ‰€æœ‰çš„æ‰‡åŒºæ•°åŠ èµ·æ¥ã€‚
-	DWORD wRootDirStartSec = pFAT12Header->BPB_HiddSec + pFAT12Header->BPB_RsvdSecCnt + pFAT12Header->BPB_NumFATs * pFAT12Header->BPB_FATSz16;
-
-	printf("Start sector of root directory:    %u\n", wRootDirStartSec);
-
-	// bytes num of start of root directory
-	// å°†å…¶ä¹˜ä¸Šæ¯æ‰‡åŒºçš„å­—èŠ‚æ•°å°±èƒ½å¾—åˆ°æ ¹ç›®å½•çš„èµ·å§‹å­—èŠ‚åç§»äº†
-	DWORD dwRootDirStartBytes = wRootDirStartSec * pFAT12Header->BPB_BytesPerSec;
-	printf("Start bytes of root directory:      %u\n", dwRootDirStartBytes);
-
-	// ç°åœ¨å¼•å…¥æ–°çš„ç»“æ„ä½“ï¼ŒFile_Headerï¼Œå’ŒPFAT12_Headerä¸€æ ·ï¼Œç›´æ¥è¿›è¡ŒæŒ‡é’ˆçš„èµ‹äºˆ
+void SeekRootDir() {
+	// ¸ùÄ¿Â¼µÄÆğÊ¼ÉÈÇø¡£
+	wRootDirStartSec = pFAT12Header->BPB_HiddSec + pFAT12Header->BPB_RsvdSecCnt + pFAT12Header->BPB_NumFATs * pFAT12Header->BPB_FATSz16;
+	// ¸ùÄ¿Â¼µÄÆğÊ¼×Ö½Ú
+	unsigned int dwRootDirStartBytes = wRootDirStartSec * pFAT12Header->BPB_BytesPerSec;
 	PFILE_HEADER pFileHeader = (PFILE_HEADER)(pImageBuffer + dwRootDirStartBytes);
-
-	int fileNum = 1;
-	// æ–‡ä»¶çš„åºå·
-
-	// ä¹‹åå°±èƒ½å¤Ÿå¯¹è¿™ä¸ªç»“æ„ä½“è¿›è¡Œæ“ä½œï¼Œç„¶åä½¿ç”¨++pFileHeader;æ¥éå†æ ¹ç›®å½•ã€‚ 
-	// æ ¹æ®pFileHeaderçš„ç¬¬ä¸€ä¸ªByteæ˜¯å¦ä¸º0x00æ¥åˆ¤æ–­æ˜¯å¦åˆ°è¾¾æœ€åä¸€ä¸ªæ–‡ä»¶
-	// ï¼ˆè¿™ä¸ªåˆ¤æ–­æ˜¯ä¸å¯¹çš„ï¼Œä¸­é—´æœ‰æ–‡ä»¶å¯èƒ½è¢«åˆ é™¤ï¼Œè€Œä¸”å¯èƒ½éš”ç€0x00åé¢è¿˜æœ‰æœ‰æ•ˆæ–‡ä»¶ï¼Œæ‰€ä»¥è¿™é‡Œéœ€è¦åç»­å†æ”¹ã€‚
-	// ä½†æ˜¯ä»…ä»…é’ˆå¯¹è¿™ä¸€ä¸ªæ„é€ çš„Imageæ˜¯æœ‰æ•ˆçš„ï¼Œå°±æš‚æ—¶ç”¨ç€äº†ï¼‰ã€‚æœ€ç»ˆå¾—åˆ°çš„æ–‡ä»¶éƒ½æ”¾å…¥FileHeadersä¸­ã€‚
-	while (*(BYTE*)pFileHeader)
-	{
-		// copy file header to the array
-		FileHeaders[fileNum - 1] = *pFileHeader;
-
+	floderItem root;
+	root.no = 0;
+	root.floderName = "";
+	// ¸ùÄ¿Â¼µÄµÚÒ»¸öÎÄ¼ş
+	while (*(BYTE*)pFileHeader) {
+		FILE_HEADER fileHeader = *pFileHeader;
 		char buffer[20];
-		memcpy(buffer, pFileHeader->DIR_Name, 11);
-		buffer[11] = 0;
+		memcpy(buffer, pFileHeader->DIR_Name, 8);
+		buffer[8] = 0;
+		string str = buffer;
+		str.erase(str.find_last_not_of(" ") + 1);		
+		if ((fileHeader.DIR_Attr & 0b00010000) == 0) {
+			// ÊÇÒ»¸öÎÄ¼ş
+			fileItem item;
+			item.folderNum = 0;
 
-		printf("File no.            %d\n", fileNum);
-		printf("File name:          %s\n", buffer);
-		printf("File attributes:    0x%02x\n", pFileHeader->DIR_Attr);
-		// å±æ€§ attribute
-		// 00000000ï¼šæ™®é€šæ–‡ä»¶ï¼Œå¯éšæ„è¯»å†™
-		// 00000001ï¼šåªè¯»æ–‡ä»¶ï¼Œä¸å¯æ”¹å†™
-		// 00000010ï¼šéšè—æ–‡ä»¶ï¼Œæµè§ˆæ–‡ä»¶æ—¶éšè—åˆ—è¡¨
-		// 00000100ï¼šç³»ç»Ÿæ–‡ä»¶ï¼Œåˆ é™¤çš„æ—¶å€™ä¼šæœ‰æç¤º
-		// 00001000ï¼šå·æ ‡ï¼Œä½œä¸ºç£ç›˜çš„å·æ ‡è¯†ç¬¦
-		// 00010000ï¼šç›®å½•æ–‡ä»¶ï¼Œæ­¤æ–‡ä»¶æ˜¯ä¸€ä¸ªå­ç›®å½•ï¼Œå®ƒçš„å†…å®¹å°±æ˜¯æ­¤ç›®å½•ä¸‹çš„æ‰€æœ‰æ–‡ä»¶ç›®å½•é¡¹
-		// 00100000ï¼šå½’æ¡£æ–‡ä»¶
+			char buffer1[20];
+			memcpy(buffer1, pFileHeader->DIR_TYPE, 3);
+			buffer1[3] = 0;
+			string str1 = buffer1;
+			str1.erase(str1.find_last_not_of(" ") + 1);
 
-		printf("First clus num:     %u\n\n", pFileHeader->DIR_FstClus);
-
+			item.fileName = str+"."+str1;
+			item.size = fileHeader.DIR_FileSize;
+			item.startClus = fileHeader.DIR_FstClus;
+			fileList.push_back(item);
+			root.Files.push_back(item);
+			root.childFileNum++;
+		}
+		else {
+			// ÊÇÒ»¸ö×ÓÎÄ¼ş¼Ğ
+			floderItem item;
+			item.floderName = str;
+			item.startClus = fileHeader.DIR_FstClus;
+			item.childFileNum = 0;
+			item.childFloderNum = 0;
+			item.no = floderNum;
+			floderNum++;
+			floderList.push_back(item);
+			root.Floders.push_back(item);
+			root.childFloderNum++;
+		}
+		FileHeaders.push_back(fileHeader);
 		++pFileHeader;
-		++fileNum;
 	}
+	floderList.insert(floderList.begin(), root);
 }
 
-// è¯»æ–‡ä»¶ -- å…¶å­å‡½æ•°åŒ…æ‹¬  GetLSBï¼ŒGetFATNextï¼ŒReadData
-// ReadFileå‡½æ•°èƒ½å¤Ÿæ ¹æ®ä¼ å…¥çš„_FILE_HEADERç»“æ„ä½“ä»ä¼ å…¥çš„ImageBufferä¸­è¯»å‡ºæ•°æ®ï¼Œå¹¶å†™åˆ°ä¼ å…¥çš„outBufferä¸­ã€‚
-DWORD ReadFile(unsigned char* pImageBuffer, PFILE_HEADER pFileHeader, unsigned char* outBuffer)
+//  ²éÕÒ×ÓÄ¿Â¼
+
+floderItem SeekChildDir(floderItem *r, unsigned int number) {
+	floderItem root = *r;
+	// ÓÃ»§Êı¾İµÄÆğÊ¼ÉÈÇø¡£
+	// ÓÃ»§Êı¾İÇøÆğÊ¼ÉÈÇø=¸ùÄ¿Â¼ËùÕ¼ÉÈÇø+Òş²ØÉÈÇø+±£ÁôÉÈÇø+FAT±íÊı*FAT±íËùÕ¼ÉÈÇø
+	unsigned int wChildDirStartSec = pFAT12Header->BPB_RootEntCnt*32 / pFAT12Header->BPB_BytesPerSec + pFAT12Header->BPB_HiddSec +
+		pFAT12Header->BPB_RsvdSecCnt + pFAT12Header->BPB_NumFATs * pFAT12Header->BPB_FATSz16;
+	// ´ØÆğÊ¼ÏßĞÔÉÈÇø=ÓÃ»§Êı¾İÇøÆğÊ¼ÉÈÇø+(´ØºÅ-2)*Ã¿´ØËùÕ¼ÉÈÇø-1
+	unsigned int clusStartSec = wChildDirStartSec + (root.startClus-2) * (pFAT12Header->BPB_SecPerClus);
+
+	// ×ÓÄ¿Â¼ÎÄ¼şµÄÆğÊ¼×Ö½Ú
+	unsigned int dwChildDirStartBytes = clusStartSec * pFAT12Header->BPB_BytesPerSec;
+	unsigned char* s = pImageBuffer + dwChildDirStartBytes;
+	PFILE_HEADER pFileHeader = (PFILE_HEADER)(pImageBuffer + dwChildDirStartBytes);
+	pFileHeader += 2;
+	// ¸ùÄ¿Â¼µÄµÚÒ»¸öÎÄ¼ş
+	// ¸ùÄ¿Â¼µÄµÚÒ»¸öÎÄ¼ş
+	unsigned int k = 1;
+	while (*(BYTE*)pFileHeader) {
+		FILE_HEADER fileHeader = *pFileHeader;
+		char buffer[20];
+		memcpy(buffer, pFileHeader->DIR_Name, 8);
+		buffer[8] = 0;
+		string str = buffer;
+		str.erase(str.find_last_not_of(" ") + 1);
+		if ((fileHeader.DIR_Attr & 0b00010000) == 0) {
+			// ÊÇÒ»¸öÎÄ¼ş
+			fileItem item;
+			item.folderNum = root.no;
+
+			char buffer1[20];
+			memcpy(buffer1, pFileHeader->DIR_TYPE, 3);
+			buffer1[3] = 0;
+			string str1 = buffer1;
+			str1.erase(str1.find_last_not_of(" ") + 1);
+
+			item.fileName = str + "." + str1;
+			item.size = fileHeader.DIR_FileSize;
+			item.startClus = fileHeader.DIR_FstClus;
+			fileList.push_back(item);
+			root.Files.push_back(item);
+			root.childFileNum++;
+		}
+		else {
+			// ÊÇÒ»¸ö×ÓÎÄ¼ş¼Ğ
+			floderItem item;
+			item.floderName = str;
+			item.startClus = fileHeader.DIR_FstClus;
+			item.childFileNum = 0;
+			item.childFloderNum = 0;
+			item.no = root.no + k*10;
+			k++;
+			root.Floders.push_back(item);
+			root.childFloderNum++;
+			FileHeaders.push_back(fileHeader);
+		}
+		++pFileHeader;
+	}
+	return root;
+}
+
+// µü´ú±éÀú²éÕÒ×ÓÄ¿Â¼
+void iSeekChildDir(floderItem *floder) {
+	if (floder->no == 0) {
+		for (unsigned int i = 0; i < floder->childFloderNum; i++) {
+			floder->Floders[i].Floders.push_back((*floder).Floders[i]);
+			floder->Floders[i].Floders.push_back(*floder);
+			floder->Floders[i] = SeekChildDir(&floder->Floders[i], floder->no);
+			iSeekChildDir(&floder->Floders[i]);
+			floderList[i + 1] = floder->Floders[i];
+		}
+	}
+	else {
+		for (unsigned int i = 2; i < floder->childFloderNum + 2; i++) {
+			floder->Floders[i].Floders.push_back((*floder).Floders[i]);
+			floder->Floders[i].Floders.push_back(*floder);
+			floder->Floders[i] = SeekChildDir(&floder->Floders[i], floder->no);
+			iSeekChildDir(&floder->Floders[i]);
+		}
+	}
+
+}
+
+// ¶ÁÎÄ¼ş×îÖÕ²Ù×÷£¬ÊäÈëÄ¿Â¼ÏîºÍÎÄ¼şÃû
+void catFile(unsigned int floderNum, string name) {
+	unsigned char outBuffer[32768];
+	floderItem item = floderList[0];
+	floderItem ans;
+	if (floderNum != 0) {
+		unsigned int n = floderNum % 10;
+		floderNum /= 10;
+		item = floderList[n];
+		while (floderNum != 0) {
+			unsigned int n = floderNum % 10;
+			floderNum /= 10;
+			ans = item.Floders[n + 1];
+			item = ans;
+		}
+	}
+	for (unsigned int i = 0; i < item.childFileNum; i++) {
+		if (name == item.Files[i].fileName) {
+			ReadFile(item.Files[i].startClus, outBuffer);
+			// TODO:
+			outputString = (char *)outBuffer;
+			cout << outputString;
+			return;
+		}
+	}
+	// TODO:
+	printf("no such file\n");
+
+	
+}
+
+
+// ¶ÁÎÄ¼ş -- Æä×Óº¯Êı°üÀ¨  GetLSB£¬GetFATNext£¬ReadData
+// ReadFileº¯ÊıÄÜ¹»¸ù¾İ´«ÈëµÄ_FILE_HEADER½á¹¹Ìå´Ó´«ÈëµÄImageBufferÖĞ¶Á³öÊı¾İ£¬²¢Ğ´µ½´«ÈëµÄoutBufferÖĞ¡£
+DWORD ReadFile(WORD FstClus, unsigned char* outBuffer)
 {
 
-	// è·å–å¼•å¯¼æ‰‡åŒº
+	// »ñÈ¡Òıµ¼ÉÈÇø
 	PFAT12_HEADER pFAT12Header = (PFAT12_HEADER)pImageBuffer;
 
-	// è·å–æ–‡ä»¶å
-	char nameBuffer[20];
-	memcpy(nameBuffer, pFileHeader->DIR_Name, 11);
-	nameBuffer[11] = 0;
-
-	printf("The FAT chain of file %s:\n", nameBuffer);
+	// »ñÈ¡ÎÄ¼şÃû
 
 	// calculate the pointer of FAT Table
-	// FATè¡¨æ‰€åœ¨æ‰‡åŒºçš„æ‰€åœ¨å­—èŠ‚
+	// FAT±íËùÔÚÉÈÇøµÄËùÔÚ×Ö½Ú
 	BYTE* pbStartOfFATTab = pImageBuffer + (pFAT12Header->BPB_HiddSec + pFAT12Header->BPB_RsvdSecCnt) * pFAT12Header->BPB_BytesPerSec;
 
-	// nextæ˜¯ç¬¬ä¸€ä¸ªç°‡ï¼ˆå› ä¸ºæ˜¯ç¬¬ä¸€ä¸ªï¼Œæ‰€æœ‰æš‚æ—¶è¿˜æ²¡NEXTï¼‰
-	WORD next = pFileHeader->DIR_FstClus;
+	// nextÊÇµÚÒ»¸ö´Ø£¨ÒòÎªÊÇµÚÒ»¸ö£¬ËùÓĞÔİÊ±»¹Ã»NEXT£©
+	WORD next = FstClus;
 
-	// å¾ªç¯æŒ‰å­—èŠ‚è¯»
+	// Ñ­»·°´×Ö½Ú¶Á
 	DWORD readBytes = 0;
 	do
 	{
-		printf(", 0x%03x", next);
-
 		// get the LSB of clus num
-		// å¾—åˆ°è¿™ä¸ªæ‰‡åŒºçš„æ‰‡åŒºå·
+		// µÃµ½Õâ¸öÉÈÇøµÄÉÈÇøºÅ
 		DWORD dwCurLSB = GetLSB(next, pFAT12Header);
 
 		// read data
-		// è¯»é‡Œé¢çš„æ•°æ®
-		readBytes += ReadData(pImageBuffer, dwCurLSB, outBuffer + readBytes);
+		// ¶ÁÀïÃæµÄÊı¾İ
+		readBytes += ReadData(dwCurLSB, outBuffer + readBytes);
 
 		// get next clus num according to current clus num
-		// è¯»ä¸‹ä¸€ä¸ªã€‚
+		// ¶ÁÏÂÒ»¸ö¡£
 		next = GetFATNext(pbStartOfFATTab, next);
 
 	} while (next <= 0xfef);
 
-	puts(""); // è¾“å‡º
-
 	return readBytes;
 }
 
-// ä¼ å…¥ç°‡å’ŒPFAT12å¤´æ–‡ä»¶ï¼Œè·å–ç°‡å†…å®¹ 
-// GetLSBç”¨æ¥è®¡ç®—å‡ºç»™å‡ºçš„FATè¡¨é¡¹å¯¹åº”åœ¨æ•°æ®åŒºçš„æ‰‡åŒºå·ã€‚
+// ´«Èë´ØºÍPFAT12Í·ÎÄ¼ş£¬»ñÈ¡´ØÄÚÈİ 
+// GetLSBÓÃÀ´¼ÆËã³ö¸ø³öµÄFAT±íÏî¶ÔÓ¦ÔÚÊı¾İÇøµÄÉÈÇøºÅ¡£
 DWORD GetLSB(DWORD ClusOfTable, PFAT12_HEADER pFAT12Header)
 {
-	// å°±æ˜¯å°†æ•°æ®åŒºå‰é¢æ‰€æœ‰çš„æ‰‡åŒºå·éƒ½åŠ èµ·æ¥ï¼Œå¾—åˆ°â€œæ•°æ®åŒºâ€çš„èµ·å§‹æ‰‡åŒºï¼Œ
-	// ç„¶åå°†ç»™å‡ºçš„FATé¡¹å‡2ï¼ˆå‰ä¸¤é¡¹æ˜¯åºŸç‰©ï¼‰ï¼Œå†ä¹˜ä¸Šæ¯ç°‡çš„æ‰‡åŒºæ•°ï¼ŒåŠ ä¸Šæ•°æ®åŒºçš„èµ·å§‹æ‰‡åŒºå·ï¼Œæœ€åå°±å¾—åˆ°äº†å½“å‰FATé¡¹çš„LSBã€‚
+	// ¾ÍÊÇ½«Êı¾İÇøÇ°ÃæËùÓĞµÄÉÈÇøºÅ¶¼¼ÓÆğÀ´£¬µÃµ½¡°Êı¾İÇø¡±µÄÆğÊ¼ÉÈÇø£¬
+	// È»ºó½«¸ø³öµÄFATÏî¼õ2£¨Ç°Á½ÏîÊÇ·ÏÎï£©£¬ÔÙ³ËÉÏÃ¿´ØµÄÉÈÇøÊı£¬¼ÓÉÏÊı¾İÇøµÄÆğÊ¼ÉÈÇøºÅ£¬×îºó¾ÍµÃµ½ÁËµ±Ç°FATÏîµÄLSB¡£
 
-	// ç”¨æˆ·æ•°æ®åŒºèµ·å§‹æ‰‡åŒº=éšè—æ‰‡åŒº+ä¿ç•™æ‰‡åŒº+FATè¡¨æ•°*FATè¡¨æ‰€å æ‰‡åŒº+æ ¹ç›®å½•æ‰€å æ‰‡åŒº
+	// ÓÃ»§Êı¾İÇøÆğÊ¼ÉÈÇø=Òş²ØÉÈÇø+±£ÁôÉÈÇø+FAT±íÊı*FAT±íËùÕ¼ÉÈÇø+¸ùÄ¿Â¼ËùÕ¼ÉÈÇø
 	DWORD dwDataStartClus = pFAT12Header->BPB_HiddSec + pFAT12Header->BPB_RsvdSecCnt + pFAT12Header->BPB_NumFATs * pFAT12Header->BPB_FATSz16 + \
 		pFAT12Header->BPB_RootEntCnt * 32 / pFAT12Header->BPB_BytesPerSec;
 
-	// ç°‡èµ·å§‹çº¿æ€§æ‰‡åŒº=ç”¨æˆ·æ•°æ®åŒºèµ·å§‹æ‰‡åŒº+(ç°‡å·-2)*æ¯ç°‡æ‰€å æ‰‡åŒº-1
+	// ´ØÆğÊ¼ÏßĞÔÉÈÇø=ÓÃ»§Êı¾İÇøÆğÊ¼ÉÈÇø+(´ØºÅ-2)*Ã¿´ØËùÕ¼ÉÈÇø-1
 	return dwDataStartClus + (ClusOfTable - 2) * pFAT12Header->BPB_SecPerClus;
 }
 
-// GetFATNextæ ¹æ®å½“å‰ç»™å‡ºçš„FATè¡¨é¡¹ï¼Œå¾—åˆ°å®ƒåœ¨FATè¡¨é‡Œçš„ä¸‹ä¸€é¡¹ã€‚å…¶å®ç°å¦‚ä¸‹ã€‚
+// GetFATNext¸ù¾İµ±Ç°¸ø³öµÄFAT±íÏî£¬µÃµ½ËüÔÚFAT±íÀïµÄÏÂÒ»Ïî¡£ÆäÊµÏÖÈçÏÂ¡£
 WORD GetFATNext(BYTE* FATTable, WORD CurOffset)
 {
-	// å…ˆç”¨ä¼ æ¥çš„FATè¡¨é¡¹Ã—1.5å¾—åˆ°å®é™…éœ€è¦è¯»å–çš„å€¼åœ¨FATè¡¨ä¸­çš„Bytesåç§»ï¼Œç„¶åç”¨ä¸€ä¸ªWORDæ¥å­˜å‚¨å®ƒã€‚ 
-	
-	// å­—èŠ‚åç§»
+	// ÏÈÓÃ´«À´µÄFAT±íÏî¡Á1.5µÃµ½Êµ¼ÊĞèÒª¶ÁÈ¡µÄÖµÔÚFAT±íÖĞµÄBytesÆ«ÒÆ£¬È»ºóÓÃÒ»¸öWORDÀ´´æ´¢Ëü¡£ 
+
+	// ×Ö½ÚÆ«ÒÆ
 	WORD tabOff = CurOffset * 1.5;
 
 	WORD nextOff = *(WORD*)(FATTable + tabOff);
 
-	// æ¥ç€ï¼Œåˆ¤æ–­è¿™ä¸ªåç§»æ˜¯å¥‡æ•°è¿˜æ˜¯å¶æ•°ã€‚å¦‚æœæ˜¯å¥‡æ•°ï¼Œåˆ™å°†å‰4ä½æ¸…0(ä¸ä¸Š0x0fff)ï¼Œå¦‚æœæ˜¯å¶æ•°ï¼Œåˆ™å°†å…¶å³ç§»4ä½ï¼Œæœ€ç»ˆå¾—åˆ°ä¸‹ä¸€é¡¹çš„FATè¡¨åç§»ã€‚ 
+	// ½Ó×Å£¬ÅĞ¶ÏÕâ¸öÆ«ÒÆÊÇÆæÊı»¹ÊÇÅ¼Êı¡£Èç¹ûÊÇÆæÊı£¬Ôò½«Ç°4Î»Çå0(ÓëÉÏ0x0fff)£¬Èç¹ûÊÇÅ¼Êı£¬Ôò½«ÆäÓÒÒÆ4Î»£¬×îÖÕµÃµ½ÏÂÒ»ÏîµÄFAT±íÆ«ÒÆ¡£ 
 	nextOff = CurOffset % 2 == 0 ? nextOff & 0x0fff : nextOff >> 4;
 
-	// è¿”å›ä¸‹ä¸€é¡¹çš„FATè¡¨åç§»
+	// ·µ»ØÏÂÒ»ÏîµÄFAT±íÆ«ÒÆ
 	return nextOff;
 }
 
-// è®¡ç®—å‡ºä¼ å…¥çš„LSBåœ¨é•œåƒBufferä¸­çš„ä½ç½®(Bytes)ï¼Œç„¶åå†™åˆ°ä¼ å…¥çš„outBufferä¸­ã€‚
+// ¼ÆËã³ö´«ÈëµÄLSBÔÚ¾µÏñBufferÖĞµÄÎ»ÖÃ(Bytes)£¬È»ºóĞ´µ½´«ÈëµÄoutBufferÖĞ¡£
 
-DWORD ReadData(unsigned char* pImageBuffer, DWORD LSB, unsigned char* outBuffer)
+DWORD ReadData(DWORD LSB, unsigned char* outBuffer)
 {
 	PFAT12_HEADER pFAT12Header = (PFAT12_HEADER)pImageBuffer;
 
-	// ä½¿ç”¨LSBÃ—æ¯æ‰‡åŒºçš„å­—èŠ‚æ•°ï¼Œå¾—åˆ°è¦è¯»çš„æ‰‡åŒºçš„å­—èŠ‚èµ·å§‹å€¼
+	// Ê¹ÓÃLSB¡ÁÃ¿ÉÈÇøµÄ×Ö½ÚÊı£¬µÃµ½Òª¶ÁµÄÉÈÇøµÄ×Ö½ÚÆğÊ¼Öµ
 
-	// æ‰‡åŒºå­—èŠ‚èµ·å§‹å€¼
+	// ÉÈÇø×Ö½ÚÆğÊ¼Öµ
 	DWORD dwReadPosBytes = LSB * pFAT12Header->BPB_BytesPerSec;
 
-	// ç„¶åç”¨memcpyå°†ImageBufferçš„ReadPosBytesåç§»å¤„çš„æ•°æ®å†™åˆ°outBufferä¸­ï¼Œ
-	// å†™å…¥é•¿åº¦æ˜¯æ¯ç°‡çš„æ‰‡åŒºæ•°ä¸æ¯æ‰‡åŒºçš„å­—èŠ‚æ•°çš„ç§¯ï¼Œä¹Ÿå°±æ˜¯æ¯ç°‡çš„å­—èŠ‚æ•°ã€‚
+	// È»ºóÓÃmemcpy½«ImageBufferµÄReadPosBytesÆ«ÒÆ´¦µÄÊı¾İĞ´µ½outBufferÖĞ£¬
+	// Ğ´Èë³¤¶ÈÊÇÃ¿´ØµÄÉÈÇøÊıÓëÃ¿ÉÈÇøµÄ×Ö½ÚÊıµÄ»ı£¬Ò²¾ÍÊÇÃ¿´ØµÄ×Ö½ÚÊı¡£
 	memcpy(outBuffer, pImageBuffer + dwReadPosBytes, pFAT12Header->BPB_SecPerClus * pFAT12Header->BPB_BytesPerSec);
 
-	// è¿”å›æ¯ä¸ªç°‡æ‰€å æ‰‡åŒºæ•° * æ¯ä¸ªæ‰‡åŒºæ‰€å æ¯”ç‰¹æ•°ï¼Œå³ç°‡æ‰€å çš„æ¯”ç‰¹æ•° 
+	// ·µ»ØÃ¿¸ö´ØËùÕ¼ÉÈÇøÊı * Ã¿¸öÉÈÇøËùÕ¼±ÈÌØÊı£¬¼´´ØËùÕ¼µÄ±ÈÌØÊı 
 	return pFAT12Header->BPB_SecPerClus * pFAT12Header->BPB_BytesPerSec;
+}
+
+void printLS() {
+	// Êä³ö¸ùÄ¿Â¼ÀïµÄÄÚÈİ
+
+	// TODO :
+	outputString = (char*)"/:\n";
+	cout << outputString;
+
+	floderItem item = floderList[0];
+	unsigned int fileNum = item.childFileNum;
+	unsigned int floderNum = item.childFloderNum;
+	string output = "";
+	for (unsigned int i = 0; i < floderNum; i++) {
+		if (i != 0) {
+			output += "  ";
+		}
+		output += item.Floders[i].floderName;
+	}
+	if (output != "") {
+		output += "  ";
+	}
+	for (unsigned int i = 0; i < fileNum; i++) {
+		if (i != 0) {
+			output += "  ";
+		}
+		output += item.Files[i].fileName;
+	}
+	
+	outputString = (char*)output.data();
+	// TODO : 
+	cout << outputString;
+
+	string head = "/";
+	for (unsigned int i = 0; i < floderNum; i++) {
+		printLSChild(head, item.Floders[i]);
+	}
+
+	// TODO :
+	outputString = (char*) ("\n");
+	cout << outputString;
+}
+
+// µü´úÑ­»·Êä³öfloderÀïfloderµÄÄÚÈİ
+void printLSChild(string head, floderItem floder) {
+
+	// TODO :
+	outputString = (char*)"\n";
+	cout << outputString;
+
+	string output;
+	output = head +  floder.floderName + "/:\n";
+	outputString = (char*)output.data();
+	// TODO
+	cout << outputString;
+
+	output = "";
+	unsigned int floderNum = floder.childFloderNum+2;
+	for (unsigned int i = 0; i < floderNum; i++) {
+		if (i != 0) {
+			output += "  ";
+		}
+		if (i == 0) {
+			output += ".";
+		}
+		else if (i == 1) {
+			output += "..";
+		}
+		else {
+			output += floder.Floders[i].floderName;
+		}
+	}
+	if (output != "") {
+		output += "  ";
+	}
+	unsigned int fileNum = floder.childFileNum;
+	for (unsigned int i = 0; i < fileNum; i++) {
+		if (i != 0) {
+			output += "  ";
+		}
+		output += floder.Files[i].fileName;
+	}
+
+	outputString = (char*)output.data();
+	// TODO : 
+	cout << outputString;
+
+	head = head + floder.floderName + "/";
+	for (unsigned int i = 2; i < floderNum; i++) {
+		printLSChild(head, floder.Floders[i]);
+	}
+}
+
+void printLSL() {
+
+}
+void printLSLChind(string head, floderItem floder) {
+
+}
+
+void printcat(floderItem floder, string fileName) {
+
 }
