@@ -173,6 +173,9 @@ int main() {
 		input.erase(0, input.find_first_not_of(" "));
 		input.erase(input.find_last_not_of(" ") + 1);
 		command c = coExp(input);
+		if (input == "exit") {
+			break;
+		}
 		if (c.type == 0){
 			printB("command not defined\n");
 		}
@@ -641,18 +644,19 @@ command coExp(string input){
 		ans.name = "";
 		return ans;
 	}
-	bool commandFile = false;
-	regex repPatternF(".[A-Z]+",regex_constants::extended);
+
+	regex repPatternF("\\.[A-Z]+",regex_constants::extended);
 	// 声明匹配结果变量
 	match_results<string::const_iterator> rerResultF;
 	// 定义待匹配的字符串
 	// 进行匹配
 	bool bValidF = regex_search(input, rerResultF, repPatternF);
+
+
 	if (bValidF)
 	{
-		commandFile = true;
 		if (input.substr(0,2)=="ls"){
-			printB("File cannot be ls. ");
+			printB("File cannot be lsed. ");
 			return ans;
 		}
 	}
