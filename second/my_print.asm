@@ -30,6 +30,7 @@ sprint:
     mov     edx, bc.len
     int     80h
  
+    mov     eax, [outputString]
     call    realPrint
 
     pop     eax
@@ -53,6 +54,7 @@ rsprint:
     mov     edx, rc.len
     int     80h
  
+    mov     eax, [outputString]
     call    realPrint
 
     mov     ebx, 1
@@ -74,13 +76,13 @@ rsprint:
 ; color has been set
 
 realPrint:
+    
     push    edx
     push    ecx
     push    ebx
     push    eax
 
     push    eax
-    mov     eax, [outputString]
     call    slen
     mov     edx, eax
 

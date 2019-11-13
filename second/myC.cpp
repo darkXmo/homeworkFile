@@ -1,5 +1,7 @@
 #pragma warning( disable : 4996)
 
+
+
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -7,6 +9,8 @@
 #include <cstring>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <regex>
 
 #define BYTE    unsigned char
 #define WORD    unsigned short
@@ -77,6 +81,11 @@ struct floderItem {
 	vector <fileItem> Files;
 };
 
+struct command {
+	unsigned int type = 0;
+	string name;
+};
+
 vector<FILE_HEADER> FileHeaders;
 PFAT12_HEADER pFAT12Header;
 vector <fileItem> fileList;
@@ -100,6 +109,11 @@ void printLSL();
 void printLSLChind(string head, floderItem floder);
 void printcat(floderItem floder, string fileName);
 
+void printB(string input);
+void printR(string input);
+
+command coExp(string input);
+
 char* outputString;
 extern "C"{
 	void sprint();
@@ -107,8 +121,6 @@ extern "C"{
 }	
 
 int main() {
-	outputString = "01";
-	sprint();
 
 	const char* filePath = "./nju.img";
 	FILE* pImageFile = fopen(filePath, "rb");
@@ -147,12 +159,8 @@ int main() {
 
 	string input;
 
-	// TODO:
-
 	while (input != "exit") {
-		// TODO
-
-
+		printB("> ");
 		getline(cin, input);
 		input.erase(0, input.find_first_not_of(" "));
 		input.erase(input.find_last_not_of(" ") + 1);
@@ -323,15 +331,13 @@ void catFile(unsigned int floderNum, string name) {
 	for (unsigned int i = 0; i < item.childFileNum; i++) {
 		if (name == item.Files[i].fileName) {
 			ReadFile(item.Files[i].startClus, outBuffer);
-			// TODO:
-			outputString = (char *)outBuffer;
-			cout << outputString;
+			string output = (char *)outBuffer;
+			printB(output);
 			return;
 		}
 	}
-	// TODO:
-	printf("no such file\n");
 
+	printB("no such file\n");
 	
 }
 
@@ -428,9 +434,7 @@ DWORD ReadData(DWORD LSB, unsigned char* outBuffer)
 void printLS() {
 	// 输出根目录里的内容
 
-	// TODO :
-	outputString = (char*)"/:\n";
-	cout << outputString;
+	printB("/:\n");
 
 	floderItem item = floderList[0];
 	unsigned int fileNum = item.childFileNum;
@@ -445,6 +449,9 @@ void printLS() {
 	if (output != "") {
 		output += "  ";
 	}
+	// print all floder
+	printR(output);
+	output = "";
 	for (unsigned int i = 0; i < fileNum; i++) {
 		if (i != 0) {
 			output += "  ";
@@ -452,32 +459,25 @@ void printLS() {
 		output += item.Files[i].fileName;
 	}
 	
-	outputString = (char*)output.data();
-	// TODO : 
-	cout << outputString;
+	printB(output);
 
 	string head = "/";
 	for (unsigned int i = 0; i < floderNum; i++) {
 		printLSChild(head, item.Floders[i]);
 	}
 
-	// TODO :
-	outputString = (char*) ("\n");
-	cout << outputString;
+	printB("\n");
 }
 
 // 迭代循环输出floder里floder的内容
 void printLSChild(string head, floderItem floder) {
 
-	// TODO :
-	outputString = (char*)"\n";
-	cout << outputString;
+
+	printB("\n");
 
 	string output;
 	output = head +  floder.floderName + "/:\n";
-	outputString = (char*)output.data();
-	// TODO
-	cout << outputString;
+	printB(output);
 
 	output = "";
 	unsigned int floderNum = floder.childFloderNum+2;
@@ -499,6 +499,10 @@ void printLSChild(string head, floderItem floder) {
 	if (output != "") {
 		output += "  ";
 	}
+	// print all floder
+	printR(output);
+	output = "";
+
 	unsigned int fileNum = floder.childFileNum;
 	for (unsigned int i = 0; i < fileNum; i++) {
 		if (i != 0) {
@@ -507,9 +511,8 @@ void printLSChild(string head, floderItem floder) {
 		output += floder.Files[i].fileName;
 	}
 
-	outputString = (char*)output.data();
-	// TODO : 
-	cout << outputString;
+	printB(output);
+	output = "";
 
 	head = head + floder.floderName + "/";
 	for (unsigned int i = 2; i < floderNum; i++) {
@@ -518,7 +521,7 @@ void printLSChild(string head, floderItem floder) {
 }
 
 void printLSL() {
-
+	
 }
 void printLSLChind(string head, floderItem floder) {
 
@@ -526,4 +529,37 @@ void printLSLChind(string head, floderItem floder) {
 
 void printcat(floderItem floder, string fileName) {
 
+}
+
+
+void printB(string input){
+	outputString = (char*)input.data();
+	sprint();
+}
+
+void printR(string input){
+	outputString = (char*)input.data();
+	rsprint();
+}
+
+command coExp(string input){
+	command ans;
+	if (input == "ls"){
+		ans.type = 1;
+		ans.name = "";
+		return ans;
+	}
+	// 定义一个正则表达式 , 4~23 位数字和字母的组合
+	regex repPattern("ls +-l+",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResult;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValid = regex_match(input, rerResult, repPattern);
+	if (bValid)
+	{
+		printB("type 2");// 匹配成功
+		ans.type = 2;
+		ans.name = "";
+	}
 }
