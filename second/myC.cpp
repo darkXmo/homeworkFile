@@ -11,6 +11,8 @@
 #include <stdlib.h>
 
 #include <regex>
+#include <regex.h>
+using namespace std;
 
 #define BYTE    unsigned char
 #define WORD    unsigned short
@@ -164,11 +166,24 @@ int main() {
 		getline(cin, input);
 		input.erase(0, input.find_first_not_of(" "));
 		input.erase(input.find_last_not_of(" ") + 1);
-		if (input.compare("ls") == 0) {
+		command c = coExp(input);
+		if (c.type == 0){
+			printB("command not defined\n");
+		}
+		else if (c.type == 1) {
 			printLS();
 		}
-		if (input.compare("ls -l") == 0) {
+		else if (c.type == 2) {
 			printLSL();
+		}
+		else if (c.type == 3){
+
+		}
+		else if (c.type == 4){
+			
+		}
+		else if (c.type == 5){
+			
 		}
 	}
 	return 0;
@@ -521,8 +536,10 @@ void printLSChild(string head, floderItem floder) {
 }
 
 void printLSL() {
-	
+	floderItem root = floderList[0];
 }
+
+
 void printLSLChind(string head, floderItem floder) {
 
 }
@@ -544,22 +561,95 @@ void printR(string input){
 
 command coExp(string input){
 	command ans;
+	ans.type = 0;
+	ans.name = "";
 	if (input == "ls"){
 		ans.type = 1;
 		ans.name = "";
 		return ans;
 	}
 	// 定义一个正则表达式 , 4~23 位数字和字母的组合
-	regex repPattern("ls +-l+",regex_constants::extended);
+	regex repPattern2("ls +-l+",regex_constants::extended);
 	// 声明匹配结果变量
-	match_results<string::const_iterator> rerResult;
+	match_results<string::const_iterator> rerResult2;
 	// 定义待匹配的字符串
 	// 进行匹配
-	bool bValid = regex_match(input, rerResult, repPattern);
-	if (bValid)
+	bool bValid2 = regex_match(input, rerResult2, repPattern2);
+	if (bValid2)
 	{
-		printB("type 2");// 匹配成功
+		printB("type2\n");
 		ans.type = 2;
 		ans.name = "";
+		return ans;
 	}
+	regex repPattern3("(ls +)((/[0-9A-Z]+)+)$",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResult3;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValid3 = regex_match(input, rerResult3, repPattern3);
+	if (bValid3)
+	{
+		printB("type3\n");
+		ans.type = 3;
+		ans.name = rerResult3[2];
+		return ans;
+	}
+
+	regex repPattern41("(ls +-l+ +)((/[0-9A-Z]+)+)$",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResult41;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValid41 = regex_match(input, rerResult41, repPattern41);
+	if (bValid41)
+	{
+		printB("type4\n");
+		ans.type = 4;
+		ans.name = rerResult41[2];
+		return ans;
+	}
+
+	regex repPattern42("(ls +)((/[0-9A-Z]+)+) +(-l+)$",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResult42;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValid42 = regex_match(input, rerResult42, repPattern42);
+	if (bValid42)
+	{
+		printB("type4\n");
+		ans.type = 4;
+		ans.name = rerResult42[2];
+		return ans;
+	}
+
+	regex repPattern43("(ls +-l+) +((/[0-9A-Z]+)+) +(-l+)$",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResult43;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValid43 = regex_match(input, rerResult43, repPattern43);
+	if (bValid43)
+	{
+		printB("type4\n");
+		ans.type = 4;
+		ans.name = rerResult43[2];
+		return ans;
+	}
+
+	regex repPattern5("(cat) +(((/[0-9A-Z]+)*)(/[A-Z0-9]+(.[A-Z]+)?))$",regex_constants::extended);
+	// 声明匹配结果变量
+	match_results<string::const_iterator> rerResult5;
+	// 定义待匹配的字符串
+	// 进行匹配
+	bool bValid5 = regex_match(input, rerResult5, repPattern5);
+	if (bValid5)
+	{
+		printB("type5\n");
+		ans.type = 5;
+		ans.name = rerResult5[2];
+		return ans;
+	}
+	return ans;
 }
