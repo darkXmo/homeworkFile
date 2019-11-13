@@ -124,7 +124,7 @@ extern "C"{
 
 int main() {
 
-	const char* filePath = "./nju.img";
+	const char* filePath = "./a.img";
 	FILE* pImageFile = fopen(filePath, "rb");
 
 	// fseek 指针位置控制，此时指针指向文件的末尾
@@ -537,11 +537,65 @@ void printLSChild(string head, floderItem floder) {
 
 void printLSL() {
 	floderItem root = floderList[0];
+	unsigned fdN = root.childFloderNum;
+	unsigned flN = root.childFileNum;
+	string out = "/ " + to_string(fdN) + " " + to_string(flN) + ":\n";
+	printB(out);
+	out = "";
+	for(unsigned int i=0;i<fdN;i++){
+		floderItem floder = root.Floders[i];
+		out += floder.floderName;
+		printR(out);
+		out = "  ";
+		out += to_string(floder.childFloderNum) + " " + to_string(floder.childFileNum) + "\n";
+		printB(out);
+		out = "";
+	}
+	for (unsigned int i=0;i<flN;i++){
+		fileItem f = root.Files[i];
+		out += f.fileName;
+		printB(out);
+		out = "  ";
+		out += to_string(f.size) + "\n";
+		printB(out);
+		out = "";
+	}
+	printB("\n");
+	for (unsigned int i=0;i<fdN;i++){
+		printLSLChind("/",root.Floders[i]);
+	}
 }
 
 
-void printLSLChind(string head, floderItem floder) {
-
+void printLSLChind(string head, floderItem root) {
+	unsigned fdN = root.childFloderNum;
+	unsigned flN = root.childFileNum;
+	string out = head + root.floderName + "/ " + to_string(fdN) + " " + to_string(flN) + ":\n";
+	printB(out);
+	out = "";
+	printR(".\n..\n");
+	for (unsigned int i=2;i<fdN+2;i++){
+		floderItem floder = root.Floders[i];
+		out += floder.floderName;
+		printR(out);
+		out = "  ";
+		out += to_string(floder.childFloderNum) + " " + to_string(floder.childFileNum) + "\n";
+		printB(out);
+		out = "";
+	}
+	for (unsigned int i=0;i<flN;i++){
+		fileItem f = root.Files[i];
+		out += f.fileName;
+		printB(out);
+		out = "  ";
+		out += to_string(f.size) + "\n";
+		printB(out);
+		out = "";
+	}
+	printB("\n");
+	for (unsigned int i=0;i<fdN;i++){
+		printLSLChind(head+root.floderName+"/ ",root.Floders[i]);
+	}
 }
 
 void printcat(floderItem floder, string fileName) {
